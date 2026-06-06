@@ -119,7 +119,7 @@ def inject_arl(arl: str) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     # ── Load the bundled default config shipped with streamrip ────────────────
-    bundled_config_path = Path(__file__).resolve().parent.parent / ".venv" / "Lib" / "site-packages" / "streamrip" / "config.toml"
+    bundled_config_path = Path("/usr/local/lib/python3.11/site-packages/streamrip/config.toml")
     config_data: dict = {}
     if bundled_config_path.exists():
         try:

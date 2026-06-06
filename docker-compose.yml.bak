@@ -1,0 +1,19 @@
+name: syncify
+
+services:
+  playlist-service:
+    build: .
+    image: syncify-playlist-service:latest
+    container_name: syncify
+    ports:
+      - "8000:8000"
+    volumes:
+      - /media/devmon/SD_Card/Media/Music:/mnt/SD_Card
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png
+      casaos.name: Syncify
+      casaos.webui: http://:8000/music

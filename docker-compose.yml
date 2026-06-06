@@ -1,11 +1,64 @@
+name: syncify
 services:
-  playlist-service:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      - /mnt/SD_Card:/mnt/SD_Card  # shared music library (adjust paths in .env accordingly)
-      - ./data:/app/data            # SQLite database persistence
-    env_file:
-      - .env
-    restart: unless-stopped
+    playlist-service:
+        build:
+            context: /DATA/AppData/syncify
+            dockerfile: Dockerfile
+        cpu_shares: 90
+        command: []
+        container_name: syncify
+        deploy:
+            resources:
+                limits:
+                    memory: "8238661632"
+        environment:
+            DATA_DIR: data
+            DATABASE_URL: sqlite:///data/playlist_service.db
+            DEEZER_ARL: aee556296b1021703a563423889adbe21af325a15ded46f4eb84d87ee21abb9542369208db27df1296d4f823eb752619ded1de1f907d30c65be0e3a570c233d5e7193f4ba6a01a4e447936245e117990cfbf2b20e157cefa5472cf4e46fd0146
+            JELLYFIN_API_KEY: 583d45ef8e174160905050ee3c32155b
+            JELLYFIN_URL: http://192.168.4.45:8097/
+            LOG_LEVEL: INFO
+            MUSIC_LIBRARY_PATH: /mnt/SD_Card
+            SECRET_KEY: c7c6a026f3b51105b8cb29309717be51c48cd060b5556a68e77f5222e3a49d4c
+            SERVICE_BASE_URL: https://beckandersonmedia.com
+        env_file:
+            - /DATA/AppData/syncify/.env
+        hostname: syncify
+        image: syncify-playlist-service:latest
+        labels:
+            casaos.name: Syncify
+            casaos.webui: http://:8000/music
+            icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyfin.png
+        networks:
+            default: null
+        ports:
+            - mode: ingress
+              target: 8000
+              published: "8000"
+              protocol: tcp
+        restart: unless-stopped
+        volumes:
+            - type: bind
+              source: /media/devmon/SD_Card/Media/Music
+              target: /mnt/SD_Card
+              bind:
+                create_host_path: true
+            - type: bind
+              source: /DATA/AppData/syncify/data
+              target: /app/data
+              bind:
+                create_host_path: true
+networks:
+    default:
+        name: syncify_default
+x-casaos:
+    author: self
+    category: self
+    hostname: ""
+    icon: ""
+    index: /
+    is_uncontrolled: false
+    port_map: ""
+    scheme: http
+    title:
+        custom: Syncify

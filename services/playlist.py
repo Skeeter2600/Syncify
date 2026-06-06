@@ -527,8 +527,12 @@ async def check_ready_playlist_jobs() -> None:
 
             # All downloads are done/failed (or there were none queued) — create the playlist
             logger.info(f"Job #{job.id} '{job.playlist_name}': all downloads complete, creating playlist...")
-
             lb_tracks: List[Dict] = json.loads(job.lb_tracks_json)
+            # Trigger Jellyfin library scan and wait for indexing
+            await jf.refresh_library()
+            await asyncio.sleep(45)  # wait 45 seconds for Jellyfin to index new files
+            # Bulk match in memory to optimize Jellyfin server load
+            library_items = await jf.get_all_library_audio(job.jellyfin_user_id)
 
             # Bulk match in memory to optimize Jellyfin server load
             library_items = await jf.get_all_library_audio(job.jellyfin_user_id)
