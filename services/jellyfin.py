@@ -241,16 +241,16 @@ class JellyfinClient:
             logger.error(f"create_playlist failed for '{name}': {exc}")
         return None
 
-   async def refresh_library(self) -> None:
-      """Trigger a Jellyfin library scan."""
-       try:
-          await _get_shared_client().post(
-             f"{Config.JELLYFIN_URL}/Library/Refresh",
-             headers=self._auth_header(),
-          )
-          logger.info("Jellyfin library refresh triggered.")
-       except Exception as exc:
-          logger.warning(f"Library refresh failed: {exc}")
+    async def refresh_library(self) -> None:
+        """Trigger a Jellyfin library scan."""
+        try:
+            await _get_shared_client().post(
+                f"{Config.JELLYFIN_URL}/Library/Refresh",
+                headers=self._auth_header(),
+            )
+            logger.info("Jellyfin library refresh triggered.")
+        except Exception as exc:
+            logger.warning(f"Library refresh failed: {exc}")
 
     async def get_all_library_audio(self, user_id: str) -> List[Dict[str, Any]]:
         """Fetch all audio items in the user's library for caching."""
