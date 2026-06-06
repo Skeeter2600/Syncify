@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% block title %}Syncify — Media Portal & Automation{% endblock %}
+
+{% block head %}
+<style>
+    /* ── Landing-page extras ── */
+    .hero {
+        display: grid;
+        grid-template-columns: 1fr 440px;
+        gap: 4rem;
+        align-items: center;
+        min-height: calc(100vh - 64px - 80px);
+        padding: 3rem 0;
+    }
+    @media (max-width: 900px) {
+        .hero { grid-template-columns: 1fr; min-height: unset; gap: 2.5rem; }
+        .hero-cta { order: -1; }
+    }
+
+    .hero-headline {
+        font-size: clamp(2.5rem, 5vw, 3.8rem);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        margin-bottom: 1.25rem;
+    }
+    .hero-sub {
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: var(--text-2);
+        margin-bottom: 2rem;
+        max-width: 42ch;
+    }
+    .hero-btns { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+    /* Feature pills */
+    .feature-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 2.5rem;
+    }
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border);
+        color: var(--text-2);
+    }
+    .pill .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+    .dot-violet { background: var(--violet); }
+    .dot-pink   { background: var(--pink); }
+    .dot-teal   { background: var(--teal); }
+
+    /* Login card extras */
+    .login-card { position: relative; overflow: hidden; }
+    .login-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(139,92,246,0.06), rgba(236,72,153,0.04));
+        pointer-events: none;
+    }
+    .login-card > * { position: relative; }
+    .login-divider {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 1.25rem 0;
+        color: var(--text-3);
+        font-size: 0.78rem;
+    }
+    .login-divider::before, .login-divider::after {
+        content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── Portal Dashboard Styles ── */
+    .portal-container {
+        padding: 2.5rem 0;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .portal-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+    .portal-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin-bottom: 0.5rem;
+    }
+    .portal-subtitle {
+        color: var(--text-2);
+        font-size: 1.05rem;
+    }
+
+    .portal-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+    }
+    @media (max-width: 640px) {
+        .portal-grid { grid-template-columns: 1fr; }
+    }
+
+    .portal-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        text-decoration: none;
+        color: inherit;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s, box-shadow 0.2s;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .portal-card:hover {
+        transform: translateY(-5px);
+        border-color: var(--border-accent);
+        box-shadow: 0 12px 30px rgba(139, 92, 246, 0.15);
+    }
+    /* Non-clickable card variant */
+    .portal-card--static {
+        cursor: default;
+        pointer-events: none;
+        opacity: 0.6;
+    }
+    .portal-card--static:hover {
+        transform: none;
+        border-color: var(--border);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    .portal-card-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .portal-icon-wrap {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-md);
+        background: var(--violet-dim);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+    .portal-card:nth-child(2) .portal-icon-wrap {
+        background: var(--pink-dim);
+        border-color: rgba(236, 72, 153, 0.2);
+    }
+    .portal-card:nth-child(3) .portal-icon-wrap {
+        background: rgba(20, 184, 166, 0.18);
+        border-color: rgba(20, 184, 166, 0.2);
+    }
+    .portal-card:nth-child(4) .portal-icon-wrap {
+        background: rgba(245, 158, 11, 0.18);
+        border-color: rgba(245, 158, 11, 0.2);
+    }
+    .portal-card-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        font-family: 'Outfit', sans-serif;
+    }
+    .portal-card-desc {
+        color: var(--text-2);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin-bottom: 1.5rem;
+        flex-grow: 1;
+    }
+    .portal-action-btn {
+        align-self: flex-start;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--violet);
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    .portal-card:hover .portal-action-btn {
+        color: var(--text-1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if session %}
+<!-- PORTAL LAUNCHER PAGE FOR LOGGED IN MEMBERS -->
+<div class="portal-container">
+    <div class="portal-header">
+        <div class="badge badge-muted" style="margin-bottom: 0.75rem;">Welcome back, {{ user.jellyfin_username }}</div>
+        <h1 class="portal-title">Media <span class="gradient-text">Portal</span></h1>
+        <p class="portal-subtitle">Access your media services and server automation below.</p>
+    </div>
+
+    <div class="portal-grid">
+        <!-- Card 1: Jellyfin -->
+        <a href="{{ jellyfin_url }}" target="_blank" rel="noopener" class="portal-card">
+            <div>
+                <div class="portal-card-header">
+                    <div class="portal-icon-wrap">🍿</div>
+                    <h2 class="portal-card-title">Jellyfin</h2>
+                </div>
+                <p class="portal-card-desc">Stream your movies, TV shows, and music library directly in the web player or device apps.</p>
+            </div>
+            <div class="portal-action-btn">Launch Jellyfin ➔</div>
+        </a>
+
+        <!-- Card 2: Syncify Playlists -->
+        <a href="/music/dashboard" class="portal-card">
+            <div>
+                <div class="portal-card-header">
+                    <div class="portal-icon-wrap">⚡</div>
+                    <h2 class="portal-card-title">Playlist Automations</h2>
+                </div>
+                <p class="portal-card-desc">Manage your linked ListenBrainz profile, view today's themed playlists, and run instant syncs.</p>
+            </div>
+            <div class="portal-action-btn">Open Dashboard ➔</div>
+        </a>
+
+        <!-- Card 3: Discover -->
+        <a href="/music/search-artists" class="portal-card">
+            <div>
+                <div class="portal-card-header">
+                    <div class="portal-icon-wrap">🔍</div>
+                    <h2 class="portal-card-title">Discover</h2>
+                </div>
+                <p class="portal-card-desc">Search for artists, songs, and albums. Explore full discographies and download missing music directly to your server.</p>
+            </div>
+            <div class="portal-action-btn">Search & Download ➔</div>
+        </a>
+
+        <!-- Card 4: System Admin or placeholder -->
+        {% if session.is_admin %}
+        <a href="/music/admin" class="portal-card">
+            <div>
+                <div class="portal-card-header">
+                    <div class="portal-icon-wrap">🛠️</div>
+                    <h2 class="portal-card-title">System Admin</h2>
+                </div>
+                <p class="portal-card-desc">Manage settings, monitor system logs, check global download status, and configure Deezer tokens.</p>
+            </div>
+            <div class="portal-action-btn">Open Admin Panel ➔</div>
+        </a>
+        {% else %}
+        <div class="portal-card portal-card--static">
+            <div>
+                <div class="portal-card-header">
+                    <div class="portal-icon-wrap">➕</div>
+                    <h2 class="portal-card-title">More coming</h2>
+                </div>
+                <p class="portal-card-desc">Additional media controls and system panels will appear here in future updates.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% else %}
+<!-- HERO & LOGIN LANDING PAGE FOR GUESTS -->
+<div class="hero">
+    <!-- Left: copy -->
+    <div>
+        <div class="badge badge-muted" style="margin-bottom: 1.25rem;">
+            <span class="dot dot-violet"></span> Connected to Jellyfin &amp; ListenBrainz
+        </div>
+
+        <h1 class="hero-headline">
+            Your music,<br>
+            <span class="gradient-text">automated</span><br>
+            and synced.
+        </h1>
+
+        <p class="hero-sub">
+            Connect your Jellyfin server to automatically track listen history on
+            ListenBrainz, generate 7 personalized playlists every day, and download
+            missing tracks in the background via Deezer &amp; streamrip.
+        </p>
+
+        <div class="hero-btns">
+            <a href="#login-section" class="btn btn-primary">Get started →</a>
+            <a href="https://listenbrainz.org" target="_blank" rel="noopener" class="btn btn-ghost">
+                About ListenBrainz
+            </a>
+        </div>
+
+        <div class="feature-pills">
+            <span class="pill"><span class="dot dot-violet"></span> Daily On Repeat</span>
+            <span class="pill"><span class="dot dot-violet"></span> 5 Themed Playlists</span>
+            <span class="pill"><span class="dot dot-pink"></span> Weekly Exploration</span>
+            <span class="pill"><span class="dot dot-teal"></span> Auto-downloads</span>
+            <span class="pill"><span class="dot dot-teal"></span> ListenBrainz Sync</span>
+        </div>
+    </div>
+
+    <!-- Right: login card -->
+    <div id="login-section" class="card login-card">
+        <h2 style="font-size: 1.5rem; margin-bottom: 0.35rem;">Sign in to Syncify</h2>
+        <p class="text-muted text-sm" style="margin-bottom: 1.5rem;">
+            Use your Jellyfin server credentials.
+        </p>
+
+        {% if error %}
+            <div class="alert alert-error">
+                <span>⚠</span> {{ error }}
+            </div>
+        {% endif %}
+
+        <form id="login-form" action="/music/login" method="post" novalidate>
+            <div class="form-group">
+                <label class="form-label" for="username">Jellyfin Username</label>
+                <input
+                    type="text" id="username" name="username"
+                    class="form-input" placeholder="e.g. alice"
+                    autocomplete="username" required
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input
+                    type="password" id="password" name="password"
+                    class="form-input" placeholder="••••••••••"
+                    autocomplete="current-password" required
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-wide" style="margin-top: 0.5rem;">
+                Authenticate &amp; Connect
+            </button>
+        </form>
+
+        <div class="login-divider">Powered by Jellyfin Auth</div>
+
+        <p class="text-muted text-sm" style="text-align: center;">
+            Your credentials are only used to obtain a Jellyfin access token
+            and are never stored.
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

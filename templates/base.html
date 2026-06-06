@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Syncify — automated Jellyfin playlist generation, ListenBrainz sync, and Deezer downloads.">
+    <title>{% block title %}Syncify{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..500&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── Design tokens ────────────────────────────────────────────────── */
+        :root {
+            --bg:            #080a0f;
+            --surface:       #0f1117;
+            --card:          rgba(15, 17, 23, 0.85);
+            --card-hover:    rgba(20, 23, 32, 0.95);
+            --border:        rgba(255, 255, 255, 0.07);
+            --border-accent: rgba(139, 92, 246, 0.35);
+
+            --text-1:        #f0f4ff;
+            --text-2:        #8892a4;
+            --text-3:        #4a5568;
+
+            --violet:        #8b5cf6;
+            --violet-dim:    rgba(139, 92, 246, 0.18);
+            --pink:          #ec4899;
+            --pink-dim:      rgba(236, 72, 153, 0.18);
+            --teal:          #14b8a6;
+            --amber:         #f59e0b;
+            --green:         #10b981;
+            --red:           #ef4444;
+            --blue:          #3b82f6;
+
+            --gradient:      linear-gradient(135deg, var(--violet), var(--pink));
+            --glow-sm:       0 0 18px rgba(139, 92, 246, 0.2);
+            --glow-md:       0 0 35px rgba(139, 92, 246, 0.3);
+            --radius-sm:     8px;
+            --radius-md:     14px;
+            --radius-lg:     20px;
+
+            --transition:    0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ── Reset ────────────────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--text-1);
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background orbs */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body::before {
+            width: 600px; height: 600px;
+            top: -200px; left: -200px;
+            background: radial-gradient(circle, rgba(139,92,246,0.07) 0%, transparent 70%);
+        }
+        body::after {
+            width: 500px; height: 500px;
+            bottom: -150px; right: -150px;
+            background: radial-gradient(circle, rgba(236,72,153,0.07) 0%, transparent 70%);
+        }
+
+        /* ── Typography ───────────────────────────────────────────────────── */
+        h1, h2, h3, h4 { font-family: 'Outfit', sans-serif; font-weight: 700; line-height: 1.2; }
+        .gradient-text {
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ── Navbar ───────────────────────────────────────────────────────── */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            height: 64px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(8, 10, 15, 0.75);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+        }
+        .logo-icon { font-size: 1.5rem; }
+
+        .nav-links { display: flex; align-items: center; gap: 0.5rem; }
+
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.85rem;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-2);
+            transition: color var(--transition), background var(--transition);
+        }
+        .nav-link:hover { color: var(--text-1); background: rgba(255,255,255,0.05); }
+        .nav-link.active { color: var(--text-1); }
+
+        /* ── Buttons ──────────────────────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.65rem 1.4rem;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            border: none;
+            transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+            white-space: nowrap;
+        }
+        .btn-primary {
+            background: var(--gradient);
+            color: #fff;
+            box-shadow: var(--glow-sm);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--glow-md); }
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-2);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover {
+            color: var(--text-1);
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.12);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: rgba(239,68,68,0.12);
+            color: var(--red);
+            border: 1px solid rgba(239,68,68,0.3);
+        }
+        .btn-danger:hover { background: rgba(239,68,68,0.2); }
+
+        .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.8rem; }
+        .btn-wide { width: 100%; }
+        .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+        /* ── Layout ───────────────────────────────────────────────────────── */
+        .page-main {
+            position: relative;
+            z-index: 1;
+            flex: 1;
+            padding: 2.5rem 2rem;
+            max-width: 1180px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.75rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+
+        @media (max-width: 900px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .navbar { padding: 0 1rem; }
+            .page-main { padding: 1.5rem 1rem; }
+        }
+
+        /* ── Cards ────────────────────────────────────────────────────────── */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.75rem;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        .card:hover { border-color: var(--border-accent); box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'Outfit', sans-serif;
+        }
+        .card-header .icon { font-size: 1.2rem; }
+
+        .card-hero {
+            border-image: linear-gradient(135deg, var(--border-accent), rgba(236,72,153,0.3)) 1;
+            background: linear-gradient(135deg, rgba(139,92,246,0.04), rgba(236,72,153,0.04));
+        }
+
+        /* ── Forms ────────────────────────────────────────────────────────── */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label {
+            display: block;
+            margin-bottom: 0.45rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-2);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .form-input {
+            width: 100%;
+            padding: 0.7rem 1rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-1);
+            font-family: inherit;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+            appearance: none;
+        }
+        .form-input::placeholder { color: var(--text-3); }
+        .form-input:focus {
+            border-color: var(--violet);
+            background: rgba(139,92,246,0.06);
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.12);
+        }
+        .form-hint {
+            margin-top: 0.4rem;
+            font-size: 0.78rem;
+            color: var(--text-2);
+        }
+        .form-hint a { color: var(--violet); text-decoration: none; }
+        .form-hint a:hover { text-decoration: underline; }
+
+        /* ── Alerts / Toasts ──────────────────────────────────────────────── */
+        .alert {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.6rem;
+            padding: 0.85rem 1rem;
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 1.25rem;
+        }
+        .alert-success { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.4); color: #34d399; }
+        .alert-error   { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.4);  color: #f87171; }
+        .alert-warning { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.4); color: var(--amber); }
+
+        /* ── Badges / Status pills ────────────────────────────────────────── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.25rem 0.65rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge-success  { background: rgba(16,185,129,0.15);  color: #34d399;  border: 1px solid rgba(16,185,129,0.25); }
+        .badge-error    { background: rgba(239,68,68,0.15);   color: #f87171;  border: 1px solid rgba(239,68,68,0.25); }
+        .badge-pending  { background: rgba(245,158,11,0.15);  color: #fbbf24;  border: 1px solid rgba(245,158,11,0.25); }
+        .badge-blue     { background: rgba(59,130,246,0.15);  color: #60a5fa;  border: 1px solid rgba(59,130,246,0.25); }
+        .badge-muted    { background: rgba(255,255,255,0.06); color: var(--text-2); border: 1px solid var(--border); }
+
+        /* ── Stat cards ───────────────────────────────────────────────────── */
+        .stat-card {
+            background: rgba(255,255,255,0.025);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 1.25rem 1.5rem;
+            transition: border-color var(--transition);
+        }
+        .stat-card:hover { border-color: var(--border-accent); }
+        .stat-value { font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 800; line-height: 1; }
+        .stat-label { font-size: 0.78rem; color: var(--text-2); margin-top: 0.3rem; font-weight: 500; }
+
+        /* ── Tables ───────────────────────────────────────────────────────── */
+        .table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        thead th {
+            padding: 0.85rem 1.1rem;
+            text-align: left;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-2);
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background var(--transition);
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(255,255,255,0.025); }
+        tbody td { padding: 0.9rem 1.1rem; vertical-align: middle; }
+
+        /* ── Playlist list items ──────────────────────────────────────────── */
+        .playlist-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.85rem 1rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+            transition: border-color var(--transition), background var(--transition);
+            gap: 0.75rem;
+        }
+        .playlist-item:hover { border-color: var(--border-accent); background: rgba(139,92,246,0.04); }
+        .playlist-item + .playlist-item { margin-top: 0.6rem; }
+        .playlist-name { font-weight: 600; font-size: 0.925rem; }
+        .playlist-meta { font-size: 0.78rem; color: var(--text-2); margin-top: 0.15rem; }
+
+        /* ── Separator ────────────────────────────────────────────────────── */
+        .section-gap { margin-top: 1.75rem; }
+
+        /* ── Spinner ──────────────────────────────────────────────────────── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            display: inline-block;
+            width: 1rem; height: 1rem;
+            border: 2px solid rgba(255,255,255,0.15);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+        }
+
+        /* ── Footer ───────────────────────────────────────────────────────── */
+        .footer {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 1.75rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-3);
+            font-size: 0.8rem;
+        }
+
+        /* ── Utility ──────────────────────────────────────────────────────── */
+        .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+        .text-muted { color: var(--text-2); }
+        .text-sm    { font-size: 0.8rem; }
+        .mono       { font-family: 'Menlo', 'Consolas', monospace; font-size: 0.82rem; }
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-3 { margin-top: 1.5rem; }
+        .mb-0 { margin-bottom: 0; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/music/" class="logo">
+            <span class="logo-icon">🎵</span>
+            <span class="gradient-text">Syncify</span>
+        </a>
+
+        {% if session %}
+        <form action="/music/search-artists" method="GET" class="nav-search-form" style="flex: 0 1 300px; margin: 0 1.5rem;">
+            <input type="hidden" name="mode" value="artist">
+            <input type="text" name="q" placeholder="🔍 Search artists..." class="form-input" style="padding: 0.45rem 1rem; font-size: 0.85rem; border-radius: 99px;" value="{{ query or '' }}">
+        </form>
+        {% endif %}
+
+        <div class="nav-links">
+            {% if session %}
+                <a href="/music/dashboard"
+                   class="nav-link {% if request.url.path.endswith('dashboard') %}active{% endif %}">
+                    Dashboard<span id="nav-queue-badge" class="badge badge-pending" style="display: none; padding: 0.1rem 0.35rem; font-size: 0.65rem; border-radius: 6px; margin-left: 5px;">0</span>
+                </a>
+                <a href="/music/search-artists"
+                   class="nav-link {% if 'search-artists' in request.url.path or 'artist/' in request.url.path %}active{% endif %}">
+                    Discover
+                </a>
+                {% if session.is_admin %}
+                    <a href="/music/admin"
+                       class="nav-link {% if request.url.path.endswith('admin') %}active{% endif %}">
+                        Admin
+                    </a>
+                {% endif %}
+                <a href="/music/logout" class="btn btn-ghost btn-sm">Sign out</a>
+            {% else %}
+                <a href="/music/" class="btn btn-primary btn-sm">Sign in</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main class="page-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        &copy; 2026 beckandersonmedia.com &mdash; Powered by Jellyfin &amp; ListenBrainz
+    </footer>
+
+    <script>
+        // Submit-button loading state
+        document.addEventListener('submit', function(e) {
+            const form = e.target;
+            const btn = form.querySelector('[type="submit"]');
+            if (form.classList.contains('nav-search-form')) return; // skip search forms
+            if (btn && !btn.dataset.noLoading) {
+                const original = btn.innerHTML;
+                btn.innerHTML = '<span class="spinner"></span> Working…';
+                btn.disabled = true;
+                // Safety reset
+                setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 15000);
+            }
+        });
+
+        {% if session %}
+        // Live update download queue badge
+        function updateQueueBadge() {
+            fetch('/music/api/queue-count')
+                .then(r => r.json())
+                .then(data => {
+                    const badge = document.getElementById('nav-queue-badge');
+                    if (badge) {
+                        if (data.total > 0) {
+                            badge.textContent = data.total;
+                            badge.style.display = 'inline-flex';
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                })
+                .catch(err => console.debug("Queue badge sync failed", err));
+        }
+        updateQueueBadge();
+        setInterval(updateQueueBadge, 10000);
+        {% endif %}
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

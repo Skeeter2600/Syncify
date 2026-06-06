@@ -1,0 +1,11 @@
+services:
+  playlist-service:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - /mnt/SD_Card:/mnt/SD_Card  # shared music library (adjust paths in .env accordingly)
+      - ./data:/app/data            # SQLite database persistence
+    env_file:
+      - .env
+    restart: unless-stopped

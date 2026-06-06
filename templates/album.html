@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% block title %}{{ album_title }} — {{ artist_name }} — Syncify{% endblock %}
+
+{% block head %}
+<style>
+    /* ── Album hero ─────────────────────────────────────────────────────────── */
+    .album-hero {
+        display: flex;
+        gap: 2.5rem;
+        align-items: flex-end;
+        margin-bottom: 2.5rem;
+        padding: 2rem;
+        background: linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.05));
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        position: relative;
+        overflow: hidden;
+    }
+    .album-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: var(--cover-color, transparent);
+        opacity: 0.06;
+        pointer-events: none;
+    }
+    @media (max-width: 640px) { .album-hero { flex-direction: column; align-items: center; text-align: center; } }
+
+    .album-art {
+        width: 220px;
+        height: 220px;
+        flex-shrink: 0;
+        border-radius: var(--radius-md);
+        object-fit: cover;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+        background: #131620;
+    }
+    .album-art-placeholder {
+        width: 220px; height: 220px;
+        flex-shrink: 0;
+        border-radius: var(--radius-md);
+        background: var(--violet-dim);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 4rem;
+    }
+    @media (max-width: 640px) { .album-art, .album-art-placeholder { width: 160px; height: 160px; } }
+
+    .album-meta { flex: 1; min-width: 0; }
+    .album-type-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--violet); margin-bottom: 0.5rem; }
+    .album-title-big { font-size: 2.4rem; font-weight: 800; font-family: 'Outfit', sans-serif; line-height: 1.1; margin-bottom: 0.4rem; }
+    .album-artist-link { font-size: 1rem; color: var(--text-2); text-decoration: none; font-weight: 600; }
+    .album-artist-link:hover { color: var(--violet); }
+    .album-year-tag { font-size: 0.82rem; color: var(--text-3); margin-top: 0.3rem; }
+
+    .album-hero-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.25rem; }
+
+    /* ── Track list ─────────────────────────────────────────────────────────── */
+    .tracklist-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem 0.5rem 3.5rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-3);
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 0.25rem;
+    }
+    .tracklist-header .th-title { flex: 1; }
+    .tracklist-header .th-dur  { width: 4rem; text-align: right; }
+    .tracklist-header .th-act  { width: 2.5rem; }
+
+    .track-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.6rem 1rem;
+        border-radius: var(--radius-sm);
+        transition: background var(--transition);
+        cursor: default;
+    }
+    .track-row:hover { background: rgba(255,255,255,0.035); }
+    .track-row.playing { background: rgba(139,92,246,0.1); }
+
+    .track-num {
+        width: 2rem;
+        text-align: right;
+        font-size: 0.8rem;
+        color: var(--text-3);
+        flex-shrink: 0;
+        font-family: monospace;
+    }
+    .track-row.playing .track-num { color: var(--violet); }
+
+    .play-btn-inline {
+        width: 2rem; height: 2rem;
+        border-radius: 50%;
+        border: 1px solid var(--border-accent);
+        background: var(--violet-dim);
+        color: var(--violet);
+        cursor: pointer;
+        display: none;
+        align-items: center; justify-content: center;
+        font-size: 0.75rem;
+        transition: background var(--transition), transform var(--transition);
+        flex-shrink: 0;
+    }
+    .track-row:hover .play-btn-inline { display: flex; }
+    .track-row.playing .play-btn-inline { display: flex; background: var(--violet); color: #fff; }
+    .play-btn-inline:hover { transform: scale(1.1); }
+
+    .track-title { flex: 1; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .track-row.playing .track-title { color: var(--violet); font-weight: 600; }
+
+    .track-dur { width: 4rem; text-align: right; font-family: monospace; font-size: 0.78rem; color: var(--text-3); flex-shrink: 0; }
+
+    .track-action { width: 2.5rem; flex-shrink: 0; display: flex; justify-content: flex-end; }
+    .dl-btn {
+        width: 1.8rem; height: 1.8rem;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text-2);
+        cursor: pointer;
+        font-size: 0.75rem;
+        display: flex; align-items: center; justify-content: center;
+        transition: background var(--transition), color var(--transition);
+    }
+    .dl-btn:hover { background: var(--violet-dim); color: var(--violet); border-color: var(--border-accent); }
+
+    /* ── Mini player ────────────────────────────────────────────────────────── */
+    #mini-player {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 500;
+        background: rgba(10, 12, 18, 0.92);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border-top: 1px solid var(--border-accent);
+        padding: 0.75rem 2rem;
+        display: none;
+        align-items: center;
+        gap: 1.5rem;
+        box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+    }
+    #mini-player.visible { display: flex; }
+
+    .player-art {
+        width: 48px; height: 48px;
+        border-radius: 6px;
+        object-fit: cover;
+        flex-shrink: 0;
+        background: #131620;
+    }
+    .player-info { flex: 1; min-width: 0; }
+    .player-track { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-artist { font-size: 0.78rem; color: var(--text-2); }
+
+    .player-controls { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
+    .ctrl-btn {
+        width: 2.2rem; height: 2.2rem;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255,255,255,0.06);
+        color: var(--text-1);
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: flex; align-items: center; justify-content: center;
+        transition: background var(--transition), transform var(--transition);
+    }
+    .ctrl-btn:hover { background: var(--violet-dim); transform: scale(1.08); }
+    .ctrl-btn.play-pause {
+        width: 2.6rem; height: 2.6rem;
+        background: var(--gradient);
+        font-size: 1rem;
+        box-shadow: var(--glow-sm);
+    }
+    .ctrl-btn.play-pause:hover { box-shadow: var(--glow-md); }
+
+    .player-progress-wrap { flex: 1; display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+    .time-label { font-size: 0.72rem; color: var(--text-3); font-family: monospace; flex-shrink: 0; }
+    .progress-bar {
+        flex: 1;
+        height: 4px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 2px;
+        cursor: pointer;
+        position: relative;
+    }
+    .progress-fill {
+        height: 100%;
+        background: var(--gradient);
+        border-radius: 2px;
+        width: 0%;
+        transition: width 0.3s linear;
+        pointer-events: none;
+    }
+
+    .player-vol { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+    .vol-icon { font-size: 0.85rem; color: var(--text-3); }
+    input[type=range].vol-slider {
+        width: 70px;
+        height: 4px;
+        accent-color: var(--violet);
+        cursor: pointer;
+    }
+
+    @media (max-width: 640px) {
+        #mini-player { padding: 0.6rem 1rem; gap: 0.75rem; }
+        .player-progress-wrap, .player-vol { display: none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/music/artist/{{ artist_mbid }}" class="btn btn-ghost btn-sm" style="margin-bottom: 1.25rem;">⇠ {{ artist_name }}</a>
+
+<!-- Album hero -->
+<div class="album-hero" id="album-hero">
+    <img src="{{ cover_url }}" alt="{{ album_title }}" class="album-art" id="album-art-img"
+         onerror="this.style.display='none'; document.getElementById('album-art-fallback').style.display='flex'">
+    <div class="album-art-placeholder" id="album-art-fallback" style="display:none;">💿</div>
+
+    <div class="album-meta">
+        <div class="album-type-label">Album</div>
+        <h1 class="album-title-big">{{ album_title }}</h1>
+        <a href="/music/artist/{{ artist_mbid }}" class="album-artist-link">{{ artist_name }}</a>
+        {% if album_year %}<div class="album-year-tag">{{ album_year }}</div>{% endif %}
+
+        <div class="album-hero-actions">
+            {% if album_in_library %}
+                <span class="badge badge-success" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">✓ In Library</span>
+                {% if album_jellyfin_id %}
+                    <a href="{{ jellyfin_url }}/web/#/details?id={{ album_jellyfin_id }}"
+                       target="_blank" rel="noopener" class="btn btn-ghost btn-sm">▶ Open in Jellyfin</a>
+                {% endif %}
+            {% else %}
+                <button class="btn btn-primary btn-sm" id="dl-album-btn"
+                        onclick="queueAlbumDownload(this)"
+                        data-artist="{{ artist_name|e }}" data-album="{{ album_title|e }}">
+                    📥 Download Album
+                </button>
+            {% endif %}
+
+            {% set in_lib_count = tracks | selectattr('in_library') | list | length %}
+            {% if in_lib_count > 0 %}
+                <button class="btn btn-ghost btn-sm" onclick="playAll()">▶ Play All ({{ in_lib_count }})</button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Track list -->
+<div class="card" style="padding: 1.25rem;">
+    {% if tracks %}
+    <div class="tracklist-header">
+        <span style="width:2rem;">#</span>
+        <span class="th-title">Title</span>
+        <span class="th-dur">Time</span>
+        <span class="th-act"></span>
+    </div>
+
+    {% for t in tracks %}
+    <div class="track-row" id="track-row-{{ loop.index0 }}"
+         data-index="{{ loop.index0 }}"
+         data-title="{{ t.title|e }}"
+         data-jellyfin-id="{{ t.jellyfin_id }}"
+         data-in-library="{{ 'true' if t.in_library else 'false' }}">
+
+        <span class="track-num">{{ t.position or loop.index }}</span>
+
+        {% if t.in_library and t.jellyfin_id %}
+        <button class="play-btn-inline" onclick="playTrack({{ loop.index0 }})" title="Play {{ t.title|e }}">▶</button>
+        {% else %}
+        <span style="width:2rem; flex-shrink:0;"></span>
+        {% endif %}
+
+        <span class="track-title" title="{{ t.title }}">{{ t.title }}</span>
+        <span class="track-dur">{{ t.duration or '' }}</span>
+
+        <span class="track-action">
+            {% if t.in_library %}
+                <span style="color: var(--green); font-size: 0.8rem;" title="In library">✓</span>
+            {% else %}
+                <button class="dl-btn" title="Download {{ t.title|e }}"
+                        onclick="queueTrackDownload(this, '{{ artist_name|e }}', '{{ t.title|e }}')">📥</button>
+            {% endif %}
+        </span>
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <p class="text-muted text-sm" style="text-align:center; padding: 2rem 0;">No tracks found for this album.</p>
+    {% endif %}
+</div>
+
+<!-- Hidden audio element -->
+<audio id="audio-engine" preload="auto"></audio>
+
+<!-- Mini player -->
+<div id="mini-player">
+    <img src="{{ cover_url }}" alt="" class="player-art" id="player-art"
+         onerror="this.style.opacity='0'">
+    <div class="player-info">
+        <div class="player-track" id="player-track-name">—</div>
+        <div class="player-artist">{{ artist_name }}</div>
+    </div>
+    <div class="player-controls">
+        <button class="ctrl-btn" id="btn-prev" onclick="playPrev()" title="Previous">⏮</button>
+        <button class="ctrl-btn play-pause" id="btn-play" onclick="togglePlay()" title="Play / Pause">▶</button>
+        <button class="ctrl-btn" id="btn-next" onclick="playNext()" title="Next">⏭</button>
+    </div>
+    <div class="player-progress-wrap">
+        <span class="time-label" id="time-current">0:00</span>
+        <div class="progress-bar" id="progress-bar" onclick="seekTo(event)">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <span class="time-label" id="time-total">0:00</span>
+    </div>
+    <div class="player-vol">
+        <span class="vol-icon">🔊</span>
+        <input type="range" class="vol-slider" id="vol-slider" min="0" max="1" step="0.02" value="1"
+               oninput="audio.volume = this.value">
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const JELLYFIN_URL  = {{ jellyfin_url | tojson }};
+const ALBUM_COVER   = {{ cover_url | tojson }};
+const ARTIST_NAME   = {{ artist_name | tojson }};
+const API_KEY       = "{{ jellyfin_url }}";  // not exposed — we use server proxy
+
+// Build a flat ordered list of playable tracks
+const TRACKS = [
+    {% for t in tracks %}
+    {% if t.in_library and t.jellyfin_id %}
+    { index: {{ loop.index0 }}, title: {{ t.title | tojson }}, jellyfinId: {{ t.jellyfin_id | tojson }} },
+    {% endif %}
+    {% endfor %}
+];
+
+let currentPlayIdx = -1;  // index into TRACKS array
+let isPlaying = false;
+
+const audio       = document.getElementById('audio-engine');
+const miniPlayer  = document.getElementById('mini-player');
+const btnPlay     = document.getElementById('btn-play');
+const trackName   = document.getElementById('player-track-name');
+const progressFill = document.getElementById('progress-fill');
+const timeCurrent = document.getElementById('time-current');
+const timeTotal   = document.getElementById('time-total');
+
+// ── Playback ─────────────────────────────────────────────────────────────────
+
+async function playTrack(rowIndex) {
+    // Find position in TRACKS array
+    const pos = TRACKS.findIndex(t => t.index === rowIndex);
+    if (pos === -1) return;
+    await _loadAndPlay(pos);
+}
+
+async function _loadAndPlay(pos) {
+    if (pos < 0 || pos >= TRACKS.length) return;
+    const track = TRACKS[pos];
+    currentPlayIdx = pos;
+
+    // Highlight row
+    document.querySelectorAll('.track-row').forEach(r => r.classList.remove('playing'));
+    const row = document.getElementById('track-row-' + track.index);
+    if (row) row.classList.add('playing');
+
+    // Update play buttons
+    document.querySelectorAll('.play-btn-inline').forEach(b => b.textContent = '▶');
+    const rowBtn = row?.querySelector('.play-btn-inline');
+    if (rowBtn) rowBtn.textContent = '⏸';
+
+    // Fetch stream URL from our proxy
+    const resp = await fetch('/music/api/jellyfin-stream/' + track.jellyfinId);
+    const { url } = await resp.json();
+
+    audio.src = url;
+    audio.play();
+    isPlaying = true;
+    btnPlay.textContent = '⏸';
+
+    trackName.textContent = track.title;
+    miniPlayer.classList.add('visible');
+
+    row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function togglePlay() {
+    if (!audio.src) return;
+    if (isPlaying) {
+        audio.pause();
+        isPlaying = false;
+        btnPlay.textContent = '▶';
+        document.querySelectorAll('.play-btn-inline').forEach(b => b.textContent = '▶');
+    } else {
+        audio.play();
+        isPlaying = true;
+        btnPlay.textContent = '⏸';
+        if (currentPlayIdx >= 0) {
+            const row = document.getElementById('track-row-' + TRACKS[currentPlayIdx].index);
+            row?.querySelector('.play-btn-inline')?.setAttribute('textContent', '⏸');
+        }
+    }
+}
+
+function playPrev() { _loadAndPlay(currentPlayIdx - 1); }
+function playNext() { _loadAndPlay(currentPlayIdx + 1); }
+
+function playAll() { if (TRACKS.length) _loadAndPlay(0); }
+
+audio.addEventListener('ended', () => {
+    if (currentPlayIdx < TRACKS.length - 1) {
+        _loadAndPlay(currentPlayIdx + 1);
+    } else {
+        isPlaying = false;
+        btnPlay.textContent = '▶';
+        document.querySelectorAll('.track-row').forEach(r => r.classList.remove('playing'));
+        document.querySelectorAll('.play-btn-inline').forEach(b => b.textContent = '▶');
+    }
+});
+
+// ── Progress bar ─────────────────────────────────────────────────────────────
+
+function fmtTime(s) {
+    if (!isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return m + ':' + String(sec).padStart(2, '0');
+}
+
+audio.addEventListener('timeupdate', () => {
+    if (!audio.duration) return;
+    const pct = (audio.currentTime / audio.duration) * 100;
+    progressFill.style.width = pct + '%';
+    timeCurrent.textContent = fmtTime(audio.currentTime);
+    timeTotal.textContent = fmtTime(audio.duration);
+});
+
+function seekTo(e) {
+    const bar = document.getElementById('progress-bar');
+    const rect = bar.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    if (audio.duration) audio.currentTime = pct * audio.duration;
+}
+
+// ── Download helpers ──────────────────────────────────────────────────────────
+
+function queueTrackDownload(btn, artist, title) {
+    btn.disabled = true;
+    btn.textContent = '⏳';
+    const body = new FormData();
+    body.append('artist_name', artist);
+    body.append('request_type', 'track');
+    body.append('title', title);
+    fetch('/music/api/queue-download-direct', { method: 'POST', body })
+        .then(r => r.json())
+        .then(() => { btn.textContent = '✓'; btn.style.color = 'var(--green)'; if (typeof updateQueueBadge === 'function') updateQueueBadge(); })
+        .catch(() => { btn.textContent = '⚠'; btn.disabled = false; });
+}
+
+function queueAlbumDownload(btn) {
+    const artist = btn.dataset.artist;
+    const album  = btn.dataset.album;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Queuing…';
+    const body = new FormData();
+    body.append('artist_name', artist);
+    body.append('request_type', 'album');
+    body.append('title', album);
+    fetch('/music/api/queue-download-direct', { method: 'POST', body })
+        .then(r => r.json())
+        .then(() => { btn.innerHTML = '⏳ Downloading…'; if (typeof updateQueueBadge === 'function') updateQueueBadge(); })
+        .catch(() => { btn.innerHTML = '⚠ Failed'; btn.disabled = false; });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel — Syncify{% endblock %}
+
+{% block head %}
+<style>
+    .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.75rem; margin-bottom: 1.75rem; }
+    @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
+
+    .trigger-btn { width: 100%; justify-content: flex-start; margin-top: 0.6rem; }
+    .trigger-btn:first-of-type { margin-top: 0; }
+
+    /* ARL status indicator */
+    .arl-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 0.85rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.82rem;
+        font-weight: 600;
+        margin-bottom: 1.25rem;
+    }
+    .arl-ok  { background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .arl-bad { background: rgba(239,68,68,0.1);  color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+
+    /* System stats bar */
+    .sys-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.75rem;
+    }
+    @media (max-width: 700px) { .sys-stats { grid-template-columns: repeat(2, 1fr); } }
+
+    /* User table avatar chip */
+    .avatar-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        background: var(--gradient);
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin-right: 0.6rem;
+        flex-shrink: 0;
+    }
+    .user-cell { display: flex; align-items: center; }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--text-2);
+    }
+    .empty-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Page header ─────────────────────────────────────────────────────────── -->
+<div style="margin-bottom: 1.75rem;">
+    <h1 style="font-size: 1.9rem; margin-bottom: 0.3rem;">
+        ⚙️ Admin Panel
+    </h1>
+    <p class="text-muted text-sm">Manage system settings, trigger operations, and monitor the download pipeline.</p>
+</div>
+
+<!-- ── Alerts ──────────────────────────────────────────────────────────────── -->
+{% if success_msg %}
+    <div class="alert alert-success"><span>✓</span> {{ success_msg }}</div>
+{% endif %}
+
+<!-- ── System stats ────────────────────────────────────────────────────────── -->
+<div class="sys-stats">
+    <div class="stat-card">
+        <div class="stat-value">{{ users | length }}</div>
+        <div class="stat-label">👤 Total Users</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--amber);">{{ stats.pending }}</div>
+        <div class="stat-label">⏳ Pending</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--green);">{{ stats.done }}</div>
+        <div class="stat-label">✓ Downloaded</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--red);">{{ stats.failed }}</div>
+        <div class="stat-label">✗ Failed</div>
+    </div>
+</div>
+
+<!-- ── Settings + Triggers ────────────────────────────────────────────────── -->
+<div class="admin-grid">
+
+    <!-- Deezer ARL -->
+    <div class="card">
+        <div class="card-header"><span class="icon">🔑</span> Deezer ARL Token</div>
+
+        <div class="arl-indicator {% if arl_set %}arl-ok{% else %}arl-bad{% endif %}">
+            {% if arl_set %}✓ ARL is configured{% else %}✗ No ARL set — downloads will fail{% endif %}
+        </div>
+
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem 1.1rem; margin-bottom: 1.25rem;">
+            <p style="font-size: 0.82rem; font-weight: 600; color: var(--violet); margin-bottom: 0.5rem;">📋 How to get your ARL token manually:</p>
+            <ol style="margin-left: 1.25rem; font-size: 0.8rem; color: var(--text-2); line-height: 1.6;">
+                <li>Log in to <a href="https://www.deezer.com" target="_blank" rel="noopener" style="color:var(--violet);">deezer.com</a> in your browser.</li>
+                <li>Press <kbd style="background:rgba(255,255,255,0.1); padding:0.1em 0.3em; border-radius:3px;">F12</kbd> (or right-click &rarr; <em>Inspect</em>) to open Developer Tools.</li>
+                <li>Go to the <strong>Application</strong> tab (Chrome/Edge/Brave) or <strong>Storage</strong> tab (Firefox).</li>
+                <li>Expand <strong>Cookies</strong> on the left and select <code>https://www.deezer.com</code>.</li>
+                <li>Find the cookie named <code style="color:var(--pink);">arl</code>, copy its value, and paste it below.</li>
+            </ol>
+            <p class="text-muted" style="font-size: 0.72rem; margin-top: 0.6rem;">
+                💡 <em>Note: Deezer cookies are <code>HttpOnly</code>, meaning automated bookmarklets or page scripts are blocked by the browser for security. Copying manually is the only reliable way.</em>
+            </p>
+        </div>
+
+        <form action="/music/admin/update-arl" method="post">
+            <div class="form-group mb-0">
+                <label class="form-label" for="deezer_arl">ARL Token</label>
+                <input
+                    type="password" id="deezer_arl" name="deezer_arl"
+                    class="form-input" placeholder="Paste ARL token here"
+                    autocomplete="off" required
+                >
+            </div>
+            <button type="submit" class="btn btn-primary btn-wide" style="margin-top:1rem;">
+                Update ARL
+            </button>
+        </form>
+    </div>
+
+    <!-- Trigger Operations -->
+    <div class="card">
+        <div class="card-header"><span class="icon">⚡</span> Trigger Operations</div>
+
+        <p class="text-muted text-sm" style="margin-bottom: 1.25rem;">
+            Manually run tasks that are normally scheduled by CRON. All operations
+            run in the background — the page will redirect immediately.
+        </p>
+
+        <form action="/music/admin/trigger-sync" method="post">
+            <button type="submit" class="btn btn-ghost trigger-btn">
+                🔄 Daily Playlist Generation (all users)
+            </button>
+        </form>
+
+        <form action="/music/admin/trigger-weekly" method="post">
+            <button type="submit" class="btn btn-ghost trigger-btn">
+                🌍 Weekly Exploration Sync (all users)
+            </button>
+        </form>
+
+        <form action="/music/admin/trigger-downloads" method="post">
+            <button type="submit" class="btn btn-ghost trigger-btn">
+                📥 Process Download Queue
+            </button>
+        </form>
+
+        <form action="/music/admin/reset-failed-downloads" method="post">
+            <button type="submit" class="btn btn-ghost trigger-btn" style="color:var(--amber); border-color:rgba(245,158,11,0.25);">
+                🔄 Reset Failed Downloads to Pending
+            </button>
+        </form>
+
+        <form action="/music/admin/clear-history" method="post">
+            <button type="submit" class="btn btn-ghost trigger-btn" style="color:var(--pink); border-color:rgba(236,72,153,0.25);">
+                🗑️ Clear Done/Failed History
+            </button>
+        </form>
+
+        <form action="/music/admin/clear-all-queue" method="post">
+            <button type="submit" class="btn btn-ghost trigger-btn" style="color:var(--red); border-color:rgba(239,68,68,0.25);">
+                🚨 Clear Entire Download Queue (All)
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ── Users table ─────────────────────────────────────────────────────────── -->
+<div class="card">
+    <div class="card-header">
+        <span class="icon">👥</span> Registered Users
+        <span class="badge badge-muted" style="margin-left:auto; font-size:0.72rem;">{{ users | length }} total</span>
+    </div>
+
+    {% if users %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Jellyfin ID</th>
+                        <th>ListenBrainz</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                        <tr>
+                            <td>
+                                <div class="user-cell">
+                                    <span class="avatar-chip">{{ u.jellyfin_username[0].upper() }}</span>
+                                    <span style="font-weight:600;">{{ u.jellyfin_username }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="mono text-muted">{{ u.jellyfin_user_id[:18] }}…</span>
+                            </td>
+                            <td>
+                                {% if u.listenbrainz_user %}
+                                    <span style="font-weight:500;">{{ u.listenbrainz_user }}</span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.listenbrainz_token %}
+                                    <span class="badge badge-success">Linked</span>
+                                {% else %}
+                                    <span class="badge badge-muted">Not linked</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted text-sm mono">
+                                {{ u.created_at.strftime('%Y-%m-%d') }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">👤</div>
+            <p>No users have signed in yet.</p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- ── Recent Downloads (global) ───────────────────────────────────────────── -->
+{% if downloads %}
+<div class="card section-gap">
+    <div class="card-header">
+        <span class="icon">📋</span> Recent Downloads (all users)
+        <span class="badge badge-muted" style="margin-left:auto;">Last 50</span>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Track</th>
+                    <th>Artist</th>
+                    <th>Status</th>
+                    <th>Deezer URL</th>
+                    <th>Completed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in downloads %}
+                    <tr>
+                        <td style="font-weight:600;">{{ item.track_name }}</td>
+                        <td class="text-muted">{{ item.artist_name }}</td>
+                        <td>
+                            {% if item.status == 'pending' %}
+                                <span class="badge badge-pending">Pending</span>
+                            {% elif item.status == 'downloading' %}
+                                <span class="badge badge-blue">Downloading</span>
+                            {% elif item.status == 'done' %}
+                                <span class="badge badge-success">Done</span>
+                            {% else %}
+                                <span class="badge badge-error">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.deezer_url %}
+                                <a href="{{ item.deezer_url }}" target="_blank" rel="noopener"
+                                   style="color:var(--violet); font-size:0.78rem; text-decoration:none;">
+                                    Open ↗
+                                </a>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted text-sm mono">
+                            {% if item.completed_at %}
+                                {{ item.completed_at.strftime('%m-%d %H:%M') }}
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+

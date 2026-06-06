@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Syncify{% endblock %}
+
+{% block head %}
+<style>
+    .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 1.75rem;
+    }
+    .page-header h1 { font-size: 1.9rem; margin-bottom: 0.2rem; }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.75rem;
+    }
+    @media (max-width: 600px) { .stats-row { grid-template-columns: 1fr; } }
+
+    .playlist-item:hover .playlist-name { color: var(--violet); }
+
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .live-dot {
+        display: inline-block;
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        background: var(--blue);
+        animation: pulse-dot 1.4s ease-in-out infinite;
+        margin-right: 5px;
+        vertical-align: middle;
+    }
+
+    .empty-state { text-align: center; padding: 3.5rem 2rem; color: var(--text-2); }
+    .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+    .empty-state p { font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page header -->
+<div class="page-header">
+    <div>
+        <h1>Welcome back, <span class="gradient-text">{{ user.jellyfin_username }}</span></h1>
+        <p class="text-muted text-sm">Playlists regenerate daily at midnight CST and push to your Jellyfin.</p>
+    </div>
+    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+        {% if user.listenbrainz_token %}
+            <span class="badge badge-success">✓ ListenBrainz linked</span>
+        {% else %}
+            <span class="badge badge-error">✗ ListenBrainz not linked</span>
+        {% endif %}
+    </div>
+</div>
+
+{% if msg %}<div class="alert alert-success"><span>✓</span> {{ msg }}</div>{% endif %}
+{% if err %}<div class="alert alert-error"><span>⚠</span> {{ err }}</div>{% endif %}
+
+<!-- Download stats -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--amber);">{{ pending_count }}</div>
+        <div class="stat-label">⏳ Pending downloads</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--green);">{{ done_count }}</div>
+        <div class="stat-label">✓ Completed this session</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color: var(--red);">{{ failed_count }}</div>
+        <div class="stat-label">✗ Failed downloads</div>
+    </div>
+</div>
+
+<!-- Main 2-column grid -->
+<div class="grid-2">
+
+    <!-- ListenBrainz Settings -->
+    <div class="card">
+        <div class="card-header"><span class="icon">🔑</span> ListenBrainz Account</div>
+
+        <form action="/music/link-listenbrainz" method="post">
+            <div class="form-group">
+                <label class="form-label" for="lb_username">ListenBrainz Username</label>
+                <input type="text" id="lb_username" name="lb_username" class="form-input"
+                       placeholder="e.g. jsmith" value="{{ user.listenbrainz_user or '' }}"
+                       autocomplete="off" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="lb_token">User Token</label>
+                <input type="password" id="lb_token" name="lb_token" class="form-input"
+                       placeholder="Paste your ListenBrainz token"
+                       value="{{ user.listenbrainz_token or '' }}"
+                       autocomplete="off" required>
+                <p class="form-hint">
+                    Find your token on your
+                    <a href="https://listenbrainz.org/profile/" target="_blank" rel="noopener">ListenBrainz Profile</a>.
+                </p>
+            </div>
+            <button type="submit" class="btn btn-primary btn-wide">Save &amp; Validate Token</button>
+        </form>
+
+        {% if user.linked_at %}
+            <p class="text-muted text-sm mt-2">Linked on {{ user.linked_at.strftime('%b %d, %Y at %H:%M UTC') }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Today's Playlists -->
+    <div class="card">
+        <div class="card-header"><span class="icon">🎵</span> Today's Playlists</div>
+
+        <div class="playlist-item">
+            <div>
+                <div class="playlist-name">🔁 On Repeat</div>
+                <div class="playlist-meta">Top 30 most-played · last 7 days</div>
+            </div>
+            <span class="badge badge-success">Active</span>
+        </div>
+
+        <div class="playlist-item">
+            <div>
+                <div class="playlist-name">🌍 Weekly Exploration</div>
+                <div class="playlist-meta">From ListenBrainz · Mondays</div>
+            </div>
+            {% if user.listenbrainz_token %}
+                <span class="badge badge-success">Active</span>
+            {% else %}
+                <span class="badge badge-muted">Requires link</span>
+            {% endif %}
+        </div>
+
+        <div class="playlist-item">
+            <div>
+                <div class="playlist-name">🎸 Daily Themes × 5</div>
+                <div class="playlist-meta">Genre-weighted from your history</div>
+            </div>
+            <span class="badge badge-success">Active</span>
+        </div>
+
+        <form action="/music/force-sync" method="post" class="mt-3">
+            <button type="submit" class="btn btn-ghost btn-wide">⚡ Regenerate All Playlists Now</button>
+        </form>
+    </div>
+</div>
+
+<!-- Download Queue -->
+<div class="card section-gap">
+    <div class="card-header" style="justify-content:space-between; flex-wrap:wrap;">
+        <span style="display:flex; align-items:center; gap:0.6rem;">
+            <span class="icon">📥</span> Download Queue
+        </span>
+        {% if pending_count > 0 %}
+            <span class="badge badge-pending">
+                <span class="live-dot"></span> {{ pending_count }} pending
+            </span>
+        {% endif %}
+    </div>
+
+    {% if downloads %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Track / Album</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Requested</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in downloads %}
+                        <tr>
+                            <td>
+                                <div style="font-weight:600;">
+                                    {% if item.request_type == 'album' %}{{ item.album_name }}
+                                    {% else %}{{ item.track_name }}{% endif %}
+                                </div>
+                                <div class="text-muted text-sm">{{ item.artist_name }}</div>
+                            </td>
+                            <td>
+                                {% if item.request_type == 'album' %}
+                                    <span class="badge badge-muted">💿 Album</span>
+                                {% else %}
+                                    <span class="badge badge-muted">🎵 Track</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.status == 'pending' %}
+                                    <span class="badge badge-pending">Pending</span>
+                                {% elif item.status == 'downloading' %}
+                                    <span class="badge badge-blue"><span class="live-dot"></span> Downloading</span>
+                                {% elif item.status == 'done' %}
+                                    <span class="badge badge-success">Done</span>
+                                {% else %}
+                                    <span class="badge badge-error">Failed</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted text-sm">{{ item.notes or '—' }}</td>
+                            <td class="text-muted text-sm mono">{{ item.created_at.strftime('%m-%d %H:%M') }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>No downloads in the queue. <a href="/music/search-artists" style="color:var(--violet);">Search for music to download →</a></p>
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh while downloads are active
+    if ({{ pending_count }} > 0 || document.querySelector('.badge-blue')) {
+        setTimeout(() => location.reload(), 30000);
+    }
+</script>
+{% endblock %}

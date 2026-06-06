@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}{{ artist.name }} — Syncify{% endblock %}
+
+{% block head %}
+<style>
+    .artist-banner {
+        display: flex;
+        gap: 2rem;
+        align-items: center;
+        background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(236,72,153,0.06));
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        margin-bottom: 2.5rem;
+    }
+    @media (max-width: 640px) { .artist-banner { flex-direction: column; text-align: center; } }
+
+    .artist-avatar {
+        width: 130px; height: 130px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid var(--violet);
+        flex-shrink: 0;
+        background: #141722;
+    }
+    .artist-avatar-placeholder {
+        width: 130px; height: 130px;
+        border-radius: 50%;
+        background: var(--violet-dim);
+        border: 3px solid var(--border-accent);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 3rem; flex-shrink: 0;
+    }
+
+    /* Type tabs */
+    .tab-row {
+        display: flex;
+        gap: 0.25rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1.75rem;
+        overflow-x: auto;
+    }
+    .tab-btn {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 0.65rem 1.1rem;
+        font: 600 0.9rem/1 inherit;
+        color: var(--text-2);
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color var(--transition), border-color var(--transition);
+    }
+    .tab-btn:hover { color: var(--text-1); }
+    .tab-btn.active { color: var(--violet); border-bottom-color: var(--violet); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Album grid */
+    .album-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 1.25rem;
+    }
+
+    /* Album card — clickable header, expandable body */
+    .album-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .album-card.open { border-color: var(--border-accent); box-shadow: 0 4px 20px rgba(139,92,246,0.1); }
+
+    .album-header {
+        cursor: pointer;
+        padding: 0.9rem;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    .album-header:hover .album-title { color: var(--violet); }
+
+    .album-cover {
+        aspect-ratio: 1;
+        width: 100%;
+        border-radius: var(--radius-sm);
+        background: #131620;
+        overflow: hidden;
+        margin-bottom: 0.65rem;
+        border: 1px solid rgba(255,255,255,0.04);
+        position: relative;
+    }
+    .album-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .album-cover-placeholder {
+        width: 100%; height: 100%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 2.5rem; color: var(--text-3);
+    }
+
+    /* Hover overlay hint */
+    .album-cover::after {
+        content: '→ View Album';
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        color: #fff;
+        opacity: 0;
+        transition: opacity var(--transition);
+        border-radius: var(--radius-sm);
+    }
+    .album-header:hover .album-cover::after { opacity: 1; }
+
+    .album-title {
+        font-size: 0.88rem; font-weight: 700;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        margin-bottom: 0.1rem;
+        transition: color var(--transition);
+    }
+    .album-year { font-size: 0.75rem; color: var(--text-2); }
+
+    /* Action row below title in header */
+    .album-actions {
+        display: flex;
+        gap: 0.4rem;
+        margin-top: 0.6rem;
+        flex-wrap: wrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/music/search-artists?q={{ artist.name }}" class="btn btn-ghost btn-sm" style="margin-bottom: 1.25rem;">⇠ Back</a>
+
+<!-- Artist banner -->
+<div class="artist-banner">
+    {% if artist.profile_image %}
+        <img src="{{ artist.profile_image }}" alt="{{ artist.name }}" class="artist-avatar">
+    {% else %}
+        <div class="artist-avatar-placeholder">🎙️</div>
+    {% endif %}
+    <div style="flex: 1; min-width: 0;">
+        <h1 style="font-size: 2.2rem; font-weight: 800; font-family: 'Outfit', sans-serif; margin-bottom: 0.3rem;">{{ artist.name }}</h1>
+        {% if artist.disambiguation %}
+            <p class="text-muted" style="font-style: italic; margin-bottom: 0.75rem;">{{ artist.disambiguation }}</p>
+        {% endif %}
+        {% if artist.bio %}
+            <p style="font-size: 0.9rem; color: var(--text-2); line-height: 1.6; max-width: 75ch;">{{ artist.bio }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Catalog tabs -->
+<div class="tab-row">
+    {% set ns = namespace(first=true) %}
+    {% for label, releases in artist.catalog.items() %}
+        {% if releases %}
+            <button class="tab-btn {% if ns.first %}active{% endif %}"
+                    onclick="showTab(event, 'tab-{{ label }}')">
+                {{ label }}s&nbsp;<span class="badge badge-muted" style="font-size:0.65rem;">{{ releases|length }}</span>
+            </button>
+            {% set ns.first = false %}
+        {% endif %}
+    {% endfor %}
+</div>
+
+<!-- Tab panels -->
+{% set ns2 = namespace(first=true) %}
+{% for label, releases in artist.catalog.items() %}
+    {% if releases %}
+    <div id="tab-{{ label }}" class="tab-panel {% if ns2.first %}active{% endif %}">
+        <div class="album-grid">
+            {% for rel in releases %}
+            <div class="album-card" id="card-{{ rel.mbid }}">
+
+                <!-- Clickable header: cover → album page, actions row -->
+                <div class="album-header">
+                    <a href="/music/album/{{ rel.mbid }}" style="display:block;text-decoration:none;color:inherit;">
+                        <div class="album-cover">
+                            <img src="{{ rel.cover_url }}" alt="{{ rel.title }}"
+                                 onerror="this.parentElement.innerHTML='<div class=\'album-cover-placeholder\'>💿</div>'">
+                        </div>
+                        <div class="album-title" title="{{ rel.title }}">{{ rel.title }}</div>
+                        <div class="album-year">{{ rel.date.split('-')[0] if rel.date != 'Unknown' else '—' }}</div>
+                    </a>
+
+                    <!-- Action buttons -->
+                    <div class="album-actions" onclick="event.stopPropagation()">
+                        {% if rel.in_library %}
+                            <span class="badge badge-success" style="padding: 0.35rem 0.6rem; font-size: 0.72rem;">✓ Library</span>
+                        {% else %}
+                            <button class="btn btn-primary btn-sm"
+                                    style="padding: 0.3rem 0.7rem; font-size: 0.75rem;"
+                                    onclick="queueDownload(this,'{{ artist.name|e }}','album','{{ rel.title|e }}')"
+                                    data-no-loading="true">
+                                📥 Download
+                            </button>
+                        {% endif %}
+                        <a href="/music/album/{{ rel.mbid }}" class="btn btn-ghost btn-sm" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">View →</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% set ns2.first = false %}
+    {% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const JELLYFIN_URL = {{ jellyfin_url | tojson }};
+
+function showTab(evt, id) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    evt.currentTarget.classList.add('active');
+}
+
+function queueDownload(btn, artist, type, title) {
+    btn.disabled = true;
+    btn.textContent = '⏳';
+
+    const body = new FormData();
+    body.append('artist_name', artist);
+    body.append('request_type', type);
+    body.append('title', title);
+
+    fetch('/music/api/queue-download-direct', { method: 'POST', body })
+        .then(r => r.json())
+        .then(() => {
+            btn.outerHTML = '<span style="font-size:.72rem;color:var(--violet);">⏬</span>';
+            if (typeof updateQueueBadge === 'function') updateQueueBadge();
+        })
+        .catch(() => {
+            btn.textContent = '⚠';
+            btn.disabled = false;
+        });
+}
+</script>
+{% endblock %}

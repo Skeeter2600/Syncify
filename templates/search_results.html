@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}{% if query %}Results for "{{ query }}"{% else %}Discover Music{% endif %} — Syncify{% endblock %}
+
+{% block head %}
+<style>
+    /* ── Tab switcher ── */
+    .discover-tabs {
+        display: flex;
+        gap: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        width: fit-content;
+        margin-bottom: 1.75rem;
+    }
+    .discover-tab {
+        padding: 0.6rem 1.4rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: none;
+        background: transparent;
+        color: var(--text-2);
+        cursor: pointer;
+        transition: background var(--transition), color var(--transition);
+        white-space: nowrap;
+    }
+    .discover-tab.active {
+        background: var(--violet-dim);
+        color: var(--violet);
+    }
+    .discover-tab:not(.active):hover {
+        background: rgba(255,255,255,0.04);
+        color: var(--text-1);
+    }
+
+    /* ── Artist result rows ── */
+    .artist-row {
+        display: flex;
+        align-items: center;
+        gap: 1.1rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 1rem 1.25rem;
+        transition: border-color var(--transition), transform var(--transition);
+    }
+    .artist-row:hover { border-color: var(--border-accent); transform: translateY(-2px); }
+
+    .artist-thumb {
+        width: 52px; height: 52px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+        border: 2px solid var(--border-accent);
+        background: #141722;
+    }
+    .artist-thumb-placeholder {
+        width: 52px; height: 52px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--violet-dim);
+        border: 2px solid rgba(139,92,246,0.2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem;
+    }
+
+    /* ── Track / Album result rows ── */
+    .media-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 0.8rem 1.1rem;
+        transition: border-color var(--transition);
+    }
+    .media-row:hover { border-color: var(--border-accent); }
+
+    .media-cover {
+        width: 48px; height: 48px;
+        border-radius: var(--radius-sm);
+        object-fit: cover;
+        flex-shrink: 0;
+        background: #141722;
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    .media-cover-placeholder {
+        width: 48px; height: 48px;
+        border-radius: var(--radius-sm);
+        flex-shrink: 0;
+        background: var(--violet-dim);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem;
+    }
+
+    .result-list { display: flex; flex-direction: column; gap: 0.65rem; }
+
+    .duration-fmt { font-family: monospace; font-size: 0.75rem; color: var(--text-3); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 860px; margin: 0 auto;">
+    <h1 style="font-size: 2.25rem; font-weight: 800; margin-bottom: 0.4rem;">
+        Discover <span class="gradient-text">Music</span>
+    </h1>
+    <p class="text-muted" style="margin-bottom: 1.5rem;">
+        Search for artists, songs, or albums — then browse discographies or download directly to your server.
+    </p>
+
+    <!-- Tab switcher -->
+    <div class="discover-tabs">
+        <button class="discover-tab {% if mode != 'track' and mode != 'album' %}active{% endif %}"
+                onclick="setMode('artist', this)">🎙️ Artist</button>
+        <button class="discover-tab {% if mode == 'track' %}active{% endif %}"
+                onclick="setMode('track', this)">🎵 Song</button>
+        <button class="discover-tab {% if mode == 'album' %}active{% endif %}"
+                onclick="setMode('album', this)">💿 Album</button>
+    </div>
+
+    <!-- Search form -->
+    <form id="search-form" action="/music/search-artists" method="GET"
+          style="display: flex; gap: 0.75rem; margin-bottom: 2rem;">
+        <input type="hidden" id="mode-field" name="mode" value="{{ mode or 'artist' }}">
+        <input
+            type="text" name="q"
+            id="q-input"
+            class="form-input"
+            placeholder="{% if mode == 'track' %}Song title or artist…{% elif mode == 'album' %}Album title or artist…{% else %}Artist name…{% endif %}"
+            value="{{ query or '' }}"
+            autofocus
+            required
+            style="flex: 1;"
+        >
+        <button type="submit" class="btn btn-primary" style="flex-shrink: 0;">Search</button>
+    </form>
+
+    <!-- Results -->
+    {% if query %}
+        {% if results %}
+            <div class="result-list">
+
+                {% if mode == 'track' %}
+                    {% for r in results %}
+                    <div class="media-row">
+                        {% if r.cover %}
+                            <img src="{{ r.cover }}" alt="{{ r.title }}" class="media-cover">
+                        {% else %}
+                            <div class="media-cover-placeholder">🎵</div>
+                        {% endif %}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 700; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                {{ r.title }}
+                            </div>
+                            <div class="text-muted text-sm" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                {{ r.artist }}{% if r.album %} · <em>{{ r.album }}</em>{% endif %}
+                                {% if r.duration %}
+                                    · <span class="duration-fmt">{{ (r.duration // 60) }}:{{ '%02d' % (r.duration % 60) }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-sm"
+                                style="flex-shrink: 0;"
+                                onclick="queueItem(this, '{{ r.artist|e }}', 'track', '{{ r.title|e }}')"
+                                data-no-loading="true">
+                            📥 Download
+                        </button>
+                    </div>
+                    {% endfor %}
+
+                {% elif mode == 'album' %}
+                    {% for r in results %}
+                    <div class="media-row">
+                        {% if r.cover %}
+                            <img src="{{ r.cover }}" alt="{{ r.title }}" class="media-cover">
+                        {% else %}
+                            <div class="media-cover-placeholder">💿</div>
+                        {% endif %}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 700; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                {{ r.title }}
+                            </div>
+                            <div class="text-muted text-sm">
+                                {{ r.artist }}{% if r.nb_tracks %} · {{ r.nb_tracks }} tracks{% endif %}
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-sm"
+                                style="flex-shrink: 0;"
+                                onclick="queueItem(this, '{{ r.artist|e }}', 'album', '{{ r.title|e }}')"
+                                data-no-loading="true">
+                            📥 Download
+                        </button>
+                    </div>
+                    {% endfor %}
+
+                {% else %}
+                    <!-- Artist results -->
+                    {% for a in results %}
+                    <div class="artist-row">
+                        {% if a.thumbnail %}
+                            <img src="{{ a.thumbnail }}" alt="{{ a.name }}" class="artist-thumb">
+                        {% else %}
+                            <div class="artist-thumb-placeholder">🎙️</div>
+                        {% endif %}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.2rem;">
+                                <span style="font-weight: 700; font-size: 1.05rem;">{{ a.name }}</span>
+                                {% if a.country %}<span class="badge badge-muted">{{ a.country }}</span>{% endif %}
+                                <span class="badge badge-blue">{{ a.type }}</span>
+                            </div>
+                            {% if a.disambiguation %}
+                                <p class="text-muted text-sm" style="margin: 0; font-style: italic;">{{ a.disambiguation }}</p>
+                            {% endif %}
+                        </div>
+                        <a href="/music/artist/{{ a.mbid }}" class="btn btn-ghost btn-sm" style="flex-shrink: 0;">Browse ➔</a>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+
+            </div>
+        {% else %}
+            <div class="card" style="text-align: center; padding: 3rem;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">
+                    {% if mode == 'track' %}🎵{% elif mode == 'album' %}💿{% else %}🎙️{% endif %}
+                </div>
+                <h3 style="font-weight: 700; margin-bottom: 0.4rem;">No results found</h3>
+                <p class="text-muted text-sm">Try a different spelling or broaden your search.</p>
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const tabs = document.querySelectorAll('.discover-tab');
+const modeField = document.getElementById('mode-field');
+const qInput = document.getElementById('q-input');
+const form = document.getElementById('search-form');
+const placeholders = {
+    artist: 'Artist name…',
+    track:  'Song title or artist…',
+    album:  'Album title or artist…',
+};
+
+function setMode(mode, btn) {
+    tabs.forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    modeField.value = mode;
+    qInput.placeholder = placeholders[mode] || 'Search…';
+    qInput.value = '';
+    qInput.focus();
+}
+
+function queueItem(btn, artist, type, title) {
+    btn.disabled = true;
+    btn.textContent = '⏳';
+
+    const body = new FormData();
+    body.append('artist_name', artist);
+    body.append('request_type', type);
+    body.append('title', title);
+
+    fetch('/music/api/queue-download-direct', { method: 'POST', body })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                btn.outerHTML = '<span class="badge badge-pending" style="white-space:nowrap;">⏬ Queued</span>';
+                if (typeof updateQueueBadge === 'function') updateQueueBadge();
+            } else {
+                btn.textContent = data.message || '⚠ Error';
+                btn.disabled = false;
+            }
+        })
+        .catch(() => {
+            btn.textContent = '⚠ Error';
+            btn.disabled = false;
+        });
+}
+</script>
+{% endblock %}
