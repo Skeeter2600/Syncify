@@ -258,7 +258,7 @@ class JellyfinClient:
         params = {
             "Recursive": "true",
             "IncludeItemTypes": "Audio",
-            "Fields": "Artists,AlbumArtist",
+            "Fields": "Artists,AlbumArtist,UserData,Genres",
         }
         client = _get_shared_client()
         try:

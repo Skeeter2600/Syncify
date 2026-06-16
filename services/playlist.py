@@ -11,7 +11,7 @@ from db import ListenSync, PlaylistJob, DownloadQueue, User, engine
 from services.downloader import queue_download, wake_queue_worker
 from services.jellyfin import JellyfinClient
 from services.listenbrainz import ListenBrainzClient
-from services.themes import assign_themes, theme_to_genre_filter, theme_to_lb_radio_prompt
+from services.themes import assign_themes, theme_to_genre_filter
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,92 @@ class LibraryResolver:
                 if track_lower == item_name or track_lower in item_name or item_name in track_lower:
                     return item.get("Id")
         return None
+
+
+# ─── Smart curation ───────────────────────────────────────────────────────────
+
+def curate_smart_mix(
+    library_items: List[Dict],
+    genre_filter: Optional[List[str]] = None,
+    artist_filter: Optional[str] = None,
+    count: int = 30,
+) -> List[str]:
+    """
+    Build a locally-curated playlist from the Jellyfin library using a
+    25 / 25 / 50  split:
+      - 25 % Heavy-rotation  (PlayCount >= 5 — favourites)
+      - 25 % Low-rotation    (PlayCount 1-4)
+      - 50 % Unplayed        (PlayCount == 0)
+
+    Optionally filter by a list of genre substrings (OR logic) or by a
+    single artist substring.  Returns a list of Jellyfin item IDs.
+    """
+    import random
+
+    heavy: List[Dict] = []
+    low: List[Dict] = []
+    unplayed: List[Dict] = []
+
+    artist_lower = artist_filter.lower() if artist_filter else None
+
+    for item in library_items:
+        item_id = item.get("Id")
+        if not item_id:
+            continue
+
+        # ── Artist filter ─────────────────────────────────────────────────────
+        if artist_lower:
+            item_artists = [
+                a.lower() for a in (item.get("Artists") or [])
+            ]
+            album_artist = (item.get("AlbumArtist") or "").lower()
+            all_artists = item_artists + ([album_artist] if album_artist else [])
+            if not any(
+                artist_lower in a or a in artist_lower for a in all_artists
+            ):
+                continue
+
+        # ── Genre filter ──────────────────────────────────────────────────────
+        if genre_filter:
+            item_genres = [g.lower() for g in (item.get("Genres") or [])]
+            if not any(
+                fg in ig or ig in fg
+                for fg in genre_filter
+                for ig in item_genres
+            ):
+                continue
+
+        # ── Bucket by play count ──────────────────────────────────────────────
+        play_count = (item.get("UserData") or {}).get("PlayCount", 0) or 0
+        if play_count >= 5:
+            heavy.append(item_id)
+        elif play_count >= 1:
+            low.append(item_id)
+        else:
+            unplayed.append(item_id)
+
+    # Calculate per-bucket targets (25 / 25 / 50)
+    n_heavy   = max(1, round(count * 0.25))
+    n_low     = max(1, round(count * 0.25))
+    n_unplayed = count - n_heavy - n_low
+
+    random.shuffle(heavy)
+    random.shuffle(low)
+    random.shuffle(unplayed)
+
+    picked = (
+        heavy[:n_heavy]
+        + low[:n_low]
+        + unplayed[:n_unplayed]
+    )
+    # If any bucket came up short, fill from the others
+    if len(picked) < count:
+        remainder = heavy[n_heavy:] + low[n_low:] + unplayed[n_unplayed:]
+        random.shuffle(remainder)
+        picked += remainder[: count - len(picked)]
+
+    random.shuffle(picked)  # final shuffle so buckets aren't obviously grouped
+    return picked
 
 
 class PlaylistService:
@@ -159,85 +245,35 @@ class PlaylistService:
             await self.jf.create_playlist(jf_id, "\U0001f501 On Repeat", on_repeat_ids)
             logger.info(f"[{user.jellyfin_username}] Created 'On Repeat' ({len(on_repeat_ids)} tracks)")
 
-        if not user.listenbrainz_token:
+        # Fetch full library once — used for both themed playlists AND artist radio
+        logger.info(f"[{user.jellyfin_username}] Fetching library audio for smart curation...")
+        library_items = await self.jf.get_all_library_audio(jf_id)
+        if not library_items:
+            logger.warning(f"[{user.jellyfin_username}] Library empty — skipping playlist generation.")
             return
 
-        # Fetch and build user library cache to avoid parallel DB fuzzy-searches
-        logger.info(f"[{user.jellyfin_username}] Fetching library audio for in-memory resolution...")
-        library_items = await self.jf.get_all_library_audio(jf_id)
-        resolver = LibraryResolver(library_items)
-
-        any_queued = False
-
-        # ─── A. Daily Themed Playlists (5 themes) ─────────────────────────────
+        # ─── A. Daily Themed Playlists (5 themes, 100% local) ─────────────────
         themes = await self.pick_daily_themes(jf_id)
         for theme_name, emoji in themes:
-            lb_prompt = theme_to_lb_radio_prompt(theme_name)
-            logger.info(
-                f"[{user.jellyfin_username}] Fetching LB Radio for theme '{theme_name}' (prompt='{lb_prompt}')..."
+            genre_filter = theme_to_genre_filter(theme_name)
+            track_ids = curate_smart_mix(
+                library_items,
+                genre_filter=genre_filter,
+                count=30,
             )
-            lb_tracks = await self.lb.get_lb_radio_playlist(
-                prompt=lb_prompt, token=user.listenbrainz_token
-            )
-            if not lb_tracks:
-                logger.warning(f"[{user.jellyfin_username}] No LB Radio tracks for theme '{theme_name}'.")
-                continue
-
             playlist_name = f"{emoji} {theme_name}"
-
-            # Create a PlaylistJob record for this theme
-            with Session(engine) as session:
-                job = PlaylistJob(
-                    user_id=user.id,
-                    jellyfin_user_id=jf_id,
-                    playlist_name=playlist_name,
-                    lb_tracks_json=json.dumps(lb_tracks),
-                    status="waiting",
-                )
-                session.add(job)
-                session.commit()
-                session.refresh(job)
-                job_id = job.id
-
-            # Check which tracks are already in the library in-memory
-            results = [resolver.resolve(t["track_name"], t["artist_name"]) for t in lb_tracks]
-
-            needs_download = False
-            for track, track_id in zip(lb_tracks, results):
-                if not track_id:
-                    queued = queue_download(
-                        track_name=track["track_name"],
-                        artist=track["artist_name"],
-                        album=track["album_name"],
-                        user_id=user.id,
-                        notes=f"Playlist: {playlist_name}",
-                        playlist_job_id=job_id,
-                    )
-                    if queued:
-                        needs_download = True
-                        any_queued = True
-
-            if not needs_download:
-                local_ids = [tid for tid in results if tid]
-                if local_ids:
-                    await self.jf.create_playlist(jf_id, playlist_name, local_ids)
-                    logger.info(
-                        f"[{user.jellyfin_username}] Playlist '{playlist_name}' created immediately "
-                        f"({len(local_ids)} tracks, all in library)"
-                    )
-                with Session(engine) as session:
-                    j = session.get(PlaylistJob, job_id)
-                    if j:
-                        j.status = "created" if local_ids else "skipped"
-                        j.completed_at = datetime.now(timezone.utc)
-                        session.add(j)
-                        session.commit()
-            else:
+            if track_ids:
+                await self.jf.create_playlist(jf_id, playlist_name, track_ids)
                 logger.info(
-                    f"[{user.jellyfin_username}] Playlist '{playlist_name}' job #{job_id} waiting on downloads."
+                    f"[{user.jellyfin_username}] '{playlist_name}' created "
+                    f"({len(track_ids)} tracks, all local)"
+                )
+            else:
+                logger.warning(
+                    f"[{user.jellyfin_username}] No local tracks found for theme '{theme_name}' — skipped."
                 )
 
-        # ─── B. Top 3 Artist Radio Playlists ──────────────────────────────────
+        # ─── B. Top 3 Artist Radio Playlists (100% local) ─────────────────────
         logger.info(f"[{user.jellyfin_username}] Calculating top 3 artists from past week...")
         history_7d = await self.jf.get_play_history(jf_id, days=7)
         artist_counts = Counter(item["artist"] for item in history_7d if item.get("artist"))
@@ -245,70 +281,22 @@ class PlaylistService:
         logger.info(f"[{user.jellyfin_username}] Top artists identified: {top_artists}")
 
         for artist in top_artists:
-            lb_prompt = f"artist:({artist})"
             playlist_name = f"\U0001f4fb {artist} Radio"
-            logger.info(
-                f"[{user.jellyfin_username}] Fetching LB Radio for artist '{artist}' (prompt='{lb_prompt}')..."
+            track_ids = curate_smart_mix(
+                library_items,
+                artist_filter=artist,
+                count=30,
             )
-            lb_tracks = await self.lb.get_lb_radio_playlist(
-                prompt=lb_prompt, token=user.listenbrainz_token
-            )
-            if not lb_tracks:
-                logger.warning(f"[{user.jellyfin_username}] No LB Radio tracks returned for artist '{artist}'.")
-                continue
-
-            with Session(engine) as session:
-                job = PlaylistJob(
-                    user_id=user.id,
-                    jellyfin_user_id=jf_id,
-                    playlist_name=playlist_name,
-                    lb_tracks_json=json.dumps(lb_tracks),
-                    status="waiting",
-                )
-                session.add(job)
-                session.commit()
-                session.refresh(job)
-                job_id = job.id
-
-            results = [resolver.resolve(t["track_name"], t["artist_name"]) for t in lb_tracks]
-
-            needs_download = False
-            for track, track_id in zip(lb_tracks, results):
-                if not track_id:
-                    queued = queue_download(
-                        track_name=track["track_name"],
-                        artist=track["artist_name"],
-                        album=track["album_name"],
-                        user_id=user.id,
-                        notes=f"Playlist: {playlist_name}",
-                        playlist_job_id=job_id,
-                    )
-                    if queued:
-                        needs_download = True
-                        any_queued = True
-
-            if not needs_download:
-                local_ids = [tid for tid in results if tid]
-                if local_ids:
-                    await self.jf.create_playlist(jf_id, playlist_name, local_ids)
-                    logger.info(
-                        f"[{user.jellyfin_username}] Artist radio '{playlist_name}' created immediately "
-                        f"({len(local_ids)} tracks)"
-                    )
-                with Session(engine) as session:
-                    j = session.get(PlaylistJob, job_id)
-                    if j:
-                        j.status = "created" if local_ids else "skipped"
-                        j.completed_at = datetime.now(timezone.utc)
-                        session.add(j)
-                        session.commit()
-            else:
+            if track_ids:
+                await self.jf.create_playlist(jf_id, playlist_name, track_ids)
                 logger.info(
-                    f"[{user.jellyfin_username}] Artist radio '{playlist_name}' job #{job_id} waiting on downloads."
+                    f"[{user.jellyfin_username}] Artist radio '{playlist_name}' created "
+                    f"({len(track_ids)} tracks, all local)"
                 )
-
-        if any_queued:
-            wake_queue_worker()
+            else:
+                logger.warning(
+                    f"[{user.jellyfin_username}] No local tracks found for artist '{artist}' — skipped."
+                )
 
     async def sync_weekly_exploration(self, user: User) -> None:
         """Fetch ListenBrainz Weekly Exploration, queue missing tracks, create PlaylistJob."""

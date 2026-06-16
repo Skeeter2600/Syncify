@@ -8,6 +8,7 @@ import time
 import sys
 import re
 import sqlite3
+import mutagen
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from datetime import datetime, timezone
@@ -587,8 +588,83 @@ def process_queue() -> int:
                     session.commit()
     finally:
         _queue_lock.release()
+        # After any batch is processed, do a quick pass over the downloaded files
+        # to fix any comma-separated genres streamrip just wrote to the ID3 tags
+        clean_recent_downloads_genres(Config.MUSIC_LIBRARY_PATH, minutes_ago=15)
 
     return attempted
+
+
+def clean_recent_downloads_genres(folder_path: Path, minutes_ago: int = 15) -> None:
+    """
+    Scans the given directory for audio files modified within `minutes_ago`
+    and uses mutagen to split any comma-separated genres. This permanently
+    fixes the ID3 tags on disk before Jellyfin even scans them.
+    """
+    if not folder_path.exists():
+        return
+        
+    now = time.time()
+    cutoff = now - (minutes_ago * 60)
+    
+    fixed_count = 0
+    scanned_count = 0
+    
+    # We support typical streamrip output formats
+    valid_exts = {".flac", ".mp3", ".ogg", ".m4a"}
+    
+    try:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                ext = Path(file).suffix.lower()
+                if ext not in valid_exts:
+                    continue
+                    
+                filepath = Path(root) / file
+                
+                # Check modification time
+                try:
+                    mtime = filepath.stat().st_mtime
+                    if mtime < cutoff:
+                        continue
+                except OSError:
+                    continue
+                    
+                scanned_count += 1
+                try:
+                    audio = mutagen.File(filepath, easy=True)
+                    if audio is None:
+                        continue
+                        
+                    genres = audio.get("genre", [])
+                    if not genres:
+                        continue
+                        
+                    new_genres = []
+                    needs_fix = False
+                    
+                    for g in genres:
+                        if "," in g:
+                            needs_fix = True
+                            new_genres.extend([x.strip() for x in g.split(",") if x.strip()])
+                        else:
+                            new_genres.append(g)
+                            
+                    if needs_fix:
+                        new_genres = list(dict.fromkeys(new_genres))
+                        audio["genre"] = new_genres
+                        audio.save()
+                        fixed_count += 1
+                        logger.info(f"Fixed genres in freshly downloaded file {file}: {genres} -> {new_genres}")
+                        
+                except Exception as e:
+                    logger.debug(f"Could not check genres for {file}: {e}")
+                    
+        if scanned_count > 0:
+            logger.info(f"Scanned {scanned_count} recent downloads for genre issues, fixed {fixed_count}.")
+            
+    except Exception as e:
+        logger.error(f"Error during recent downloads genre cleanup: {e}")
 
 
 def wake_queue_worker() -> None:
